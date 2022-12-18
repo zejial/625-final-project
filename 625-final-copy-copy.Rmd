@@ -1,0 +1,134 @@
+---
+title: "625-final"
+author: "Zejia Liu, Jiayuan Xiao"
+date: "2022-12-17"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=F,echo=F,include=F}
+library(readr)
+library(ggplot2)
+library(tidyverse)
+library(showtext)
+library(readxl)
+library(dplyr)
+library(Rtsne)
+library(caret)
+library(modeldb)
+df <- read_csv("Clean_Dataset.csv")
+head(df)
+```
+
+```{r echo=F}
+glimpse(df)
+```
+
+## 1. Introduction
+‘Easemytrip’ is an internet platform for booking flight tickets, and hence a platform that potential passengers use to buy tickets.  Our goal is to analyze/visualize the flight booking dataset obtained from the ‘Ease My Trip’ website and build a model with higher accuracy to predict flight price.  A thorough study of the data will aid in the discovery of valuable insights that will be of enormous value to passengers. A total of 300261 distinct flight booking options was extracted from the site. Data was collected for 50 days, from February 11th to March 31st, 2022. Dataset contains information about flight booking options for flight travel between India's top 6 metro cities.
+
+## 2. Data processing
+### 1）Transform characters to factors，then convert factors to nubmers.
+```{r echo=F}
+#Transform characters to factors
+df <- df %>% mutate_if(is.character,as.factor) 
+#df %>% summary()
+#Convert factors to nubmers
+df1 <- df
+levels(df1$airline)<- sequence(length(levels(df1$airline)))
+levels(df1$flight)<- sequence(length(levels(df1$flight)))
+levels(df1$source_city)<- sequence(length(levels(df1$source_city)))
+levels(df1$departure_time)<- sequence(length(levels(df1$departure_time)))
+levels(df1$arrival_time) <- sequence(length(df1$arrival_time))
+levels(df1$destination_city) <- sequence(length(df1$destination_city))
+levels(df1$duration) <- sequence(length(df1$duration))
+levels(df1$days_left) <- sequence(length(df1$days_left))
+levels(df1$price) <- sequence(length(df1$price))
+summary(df1)
+```
+
+### 2)Check up the correlations:
+```{r echo=F}
+#Check up the correlations
+corr <- df %>% select(c('airline','flight','source_city','departure_time','stops','arrival_time','destination_city','duration','days_left','price')) %>% 
+mutate_if(is.factor,as.numeric) %>% drop_na() %>% cor()
+
+knitr::kable(corr)
+```
+
+### 3)Split datasets by training/test 80%/20%:
+```{r}
+#Split datasets by training/test 80%/20%
+df2 <- df1 %>% select(c('airline','flight','source_city','departure_time','stops','arrival_time','destination_city','duration','days_left','price')) %>% 
+mutate_if(is.factor,as.numeric) %>% drop_na()
+set.seed(500)
+s <- sample(nrow(df2),nrow(df2)*0.80)
+trainset <- df2[s,]
+testset <- df2[-s,]
+dim(trainset)
+dim(testset)
+```
+
+
+## 2. Data Visualization
+We have already analyzed the correlation earlier.By ggplot, we can visually observe the relationship between each variable in the data we collected and the price of airline tickets. From there, it can help consumers to simply determine and predict the price of airline tickets according to airline, cities, and departure time etc.
+```{r warning=F, echo=F, out.height="50%", out.width="50%", fig.align='center'}
+par(mfrow = c(4, 2))
+
+p <- ggplot(df, aes(class, price))
+plot(p + geom_point())
+
+h <- ggplot(df, mapping = aes(departure_time, price))
+plot(h + geom_boxplot(aes(group = departure_time)))
+
+s <- ggplot(df, mapping = aes(stops, price, color = class))
+plot(s + geom_boxplot(aes(group = stops)))
+
+a <- ggplot(df, mapping = aes(arrival_time, price, color = class))
+plot(a + geom_boxplot(aes(group = arrival_time)))
+
+d <- ggplot(df, mapping = aes(days_left, price, color = class))
+plot(d + geom_boxplot(aes(group = days_left)))  
+
+r <- ggplot(df, mapping = aes(duration, price, color = class))
+plot(r + geom_point())
+
+f <- ggplot(df, mapping = aes(airline, price, color = class))
+plot(f + geom_jitter(alpha = 0.2))
+
+g <- ggplot(df, mapping = aes(source_city, price, color = class))
+plot(g + geom_jitter(alpha = 0.2))
+```
+
+### Dimension Reduction
+```{r out.height="50%", out.width="50%", fig.align='center', echo=F}
+knitr::include_graphics("pca.jpg")
+knitr::include_graphics("tSNE.jpg")
+```
+
+As we can see from the result of PCA and tSNE, the data can be divide into two group, which indicates that our machine learning algorithm might have the potential to achieve high accuracy.
+
+## 3.Model and Result
+
+We applied three types of methods to predict the flight ticket price. Linear regression and its extensions are classic approaches in mechine learning algorithm. Support vector regression uses the same idea as SVM. XGBoost is a efficient algorithm based on the gradient boosting framework. Below is the model comparison result of these models.
+
+```{r echo=F}
+Model=c("Linear regression","Lasso regression","Ridge regression",
+  "Elastic net regression", "Support vector regression", "XGBoost")
+RMSE=c(7005.015,7005.006,7005.012,7005.008,14874.945,3368.904)
+R2_score=c(0.905,0.905,0.905,0.905,0.570,0.978)
+model_comparison = data.frame(cbind(Model,RMSE,R2_score))
+knitr::kable(model_comparison)
+```
+
+As shown in the chart, the results of linear regression, Lasso regression, Ridge regression and Elastic net regression have no significant differences. This might suggest that the dimension of variables in this dataset is not too high. The R2 score of the support vector regression is low, which shows that SVR might not suitable for this dataset. As one of the most popular prediction algorithms in kaggle, we can see from the table that XGBoost outperforms other algorithms.
+
+
+## 4.Challenge and future work
+Since the dataset has about 300,000 observation, the main challenge of this project is the computational challenge. Algorithms like t-SNE and SVR can be very time-consuming in this case. Next step, we will try to run the models on gpu to improve the efficiency. Besides, we will also try other ML algorithms to see if they can achieve higher accuracy.
+
